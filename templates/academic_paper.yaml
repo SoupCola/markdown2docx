@@ -1,0 +1,85 @@
+name: "学术论文"
+description: "中文学术论文模板"
+page:
+  size: A4
+  margins:
+    top: 2.54cm
+    bottom: 2.54cm
+    left: 2.54cm
+    right: 2.54cm
+  header:
+    content: "学术论文"
+    font_cn: "宋体"
+    font_en: "Times New Roman"
+    size: "小五"
+  footer:
+    content: ""
+  page_number:
+    position: bottom_center
+    format: arabic
+    start: 1
+headings:
+  level_1:
+    font_cn: "黑体"
+    font_en: "Times New Roman"
+    size: "四号"
+    bold: true
+    align: center
+    space_before: 18pt
+    space_after: 12pt
+  level_2:
+    font_cn: "黑体"
+    font_en: "Times New Roman"
+    size: "小四"
+    bold: true
+    align: left
+    space_before: 12pt
+    space_after: 6pt
+  level_3:
+    font_cn: "楷体"
+    font_en: "Times New Roman"
+    size: "小四"
+    bold: true
+    align: left
+    space_before: 6pt
+    space_after: 6pt
+body:
+  font_cn: "宋体"
+  font_en: "Times New Roman"
+  size: "小四"
+  first_line_indent: 2chars
+  line_spacing: 1.5lines
+  line_spacing_rule: multiple
+  align: justify
+  space_before: 0pt
+  space_after: 0pt
+formulas:
+  font_cn: "宋体"
+  font_en: "Times New Roman"
+  size: "小四"
+  align: center
+  space_before: 6pt
+  space_after: 6pt
+  numbering: continuous
+figures:
+  caption_font_cn: "宋体"
+  caption_font_en: "Times New Roman"
+  caption_size: "五号"
+  caption_bold: false
+  figure_caption_position: below
+  table_caption_position: above
+  numbering: continuous
+  table_style: three_line
+references:
+  title: "参考文献"
+  title_font_cn: "黑体"
+  title_font_en: "Times New Roman"
+  title_size: "小四"
+  title_bold: true
+  title_align: "left"
+  font_cn: "宋体"
+  font_en: "Times New Roman"
+  size: "五号"
+  align: "left"
+  hanging_indent: "2chars"
+  number_style: "bracket"
