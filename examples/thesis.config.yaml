@@ -1,0 +1,33 @@
+project:
+  title: 基于XXX的毕业论文
+  language: zh-CN
+
+content:
+  chapters:
+    - full_format_test.md
+    - test_make_figure.md
+  # bibliography: references.md  # Optional
+
+figures:
+  output_dir: assets/figures
+  source_dir: assets/drawio
+  generate_with: drawio-mcp
+
+format:
+  template: thesis
+  output_docx: build/thesis.docx
+  # reference_docx: refs/style-samples/school-template.docx
+  overrides: {}
+
+workflow:
+  mode: strict
+  allow_degraded: false
+  run_dir: .paper-workflow/runs
+  cache_dir: .paper-workflow/cache
+  on_missing_generator: fail
+  content_generation:
+    enabled: true
+    rules:
+      - humanizer    # Rule 1: Remove AI writing traces
+      - thesis-writing  # Rule 3: Thesis writing guidelines
+      - review-check  # Rule 4: Final review

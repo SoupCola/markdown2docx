@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docx-formatter"
+version = "0.1.0"
+description = "Markdown to DOCX converter with Chinese thesis formatting"
+requires-python = ">=3.10"
+dependencies = [
+    "python-docx>=0.8.11",
+    "PyYAML>=6.0",
+    "latex2mathml>=3.78",
+    "mathml2omml>=0.0.2",
+    "markdown-it-py>=3.0",
+    "Pillow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+docx-format = "docx_formatter.cli:main"
+paper-workflow = "paper_workflow.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["docx_formatter*", "paper_workflow*"]
+
+[tool.setuptools.package-data]
+"docx_formatter" = ["templates/*.yaml"]
