@@ -36,4 +36,4 @@ def apply_body_formatting(document, body_config):
             paragraph.paragraph_format.space_after = Pt(after_value)
 
         for run in paragraph.runs:
-            apply_font(run, body_config.font_cn, body_config.font_en, body_config.size, False, False)
+            apply_font(run, body_config.font_cn, body_config.font_en, body_config.size, bool(run.bold), bool(run.italic))

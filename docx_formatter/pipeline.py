@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import asdict
+import re
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -14,7 +15,7 @@ from .analyzer import analyze, summarize_analysis
 from .config import load_template, merge_overrides
 from .figures import apply_figure_table_formatting, auto_number_captions
 from .format_extractor import extract_format_from_docx
-from .formulas import apply_formula_formatting, apply_formula_numbering, insert_formula_paragraph
+from .formulas import apply_formula_formatting, apply_formula_numbering, insert_formula_paragraph, latex_to_omml_element, set_formula_font
 from .headings import apply_heading_formatting
 from .md_parser import parse_markdown_files
 from .numbering import _apply_numPr, _register_numbering_definitions, convert_detected_numbering, detect_numbering_groups
@@ -76,10 +77,53 @@ def _insert_image(document, item: dict, page_config=None) -> None:
         cap_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
-def _insert_table(document, item: dict) -> int | None:
+_INLINE_PATTERN = re.compile(r"(\*\*[^*]+\*\*|\$[^$]+\$)")
+
+
+def _is_safe_inline_formula(latex: str) -> bool:
+    return not re.search(r"[\u4e00-\u9fff，。；：！？、]", latex)
+
+
+def _add_inline_runs(paragraph, text: str, body_config) -> None:
+    for token in _INLINE_PATTERN.split(text):
+        if not token:
+            continue
+        if token.startswith("**") and token.endswith("**"):
+            run = paragraph.add_run(token[2:-2])
+            apply_font(run, body_config.font_cn, body_config.font_en, body_config.size, True, False)
+        elif token.startswith("$") and token.endswith("$"):
+            latex = token[1:-1].strip()
+            if latex and _is_safe_inline_formula(latex):
+                omml = latex_to_omml_element(latex)
+                set_formula_font(omml, body_config.font_en)
+                paragraph._p.append(omml)
+            else:
+                run = paragraph.add_run(token)
+                apply_font(run, body_config.font_cn, body_config.font_en, body_config.size, False, False)
+        else:
+            run = paragraph.add_run(token)
+            apply_font(run, body_config.font_cn, body_config.font_en, body_config.size, False, False)
+
+
+def _add_body_paragraph(document, text: str, body_config):
+    paragraph = document.add_paragraph()
+    _add_inline_runs(paragraph, text, body_config)
+    return paragraph
+
+
+def _insert_table(document, item: dict, body_config) -> int | None:
     rows = item.get("rows", [])
     if not rows:
         return None
+
+    caption_idx = None
+    caption = item.get("caption")
+    if caption:
+        table_num = item.get("table_num")
+        caption_text = f"表{table_num} {caption}" if table_num else caption
+        cap_paragraph = document.add_paragraph(caption_text)
+        cap_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        caption_idx = len(document.paragraphs) - 1
 
     column_count = max(len(row) for row in rows)
     table = document.add_table(rows=len(rows), cols=column_count)
@@ -88,15 +132,15 @@ def _insert_table(document, item: dict) -> int | None:
     for row_idx, row in enumerate(rows):
         for col_idx in range(column_count):
             value = row[col_idx] if col_idx < len(row) else ""
-            table.cell(row_idx, col_idx).text = value
+            paragraph = table.cell(row_idx, col_idx).paragraphs[0]
+            _add_inline_runs(paragraph, value, body_config)
 
-    caption = item.get("caption")
-    if caption is None:
-        return None
+    if caption == "":
+        cap_paragraph = document.add_paragraph()
+        cap_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        caption_idx = len(document.paragraphs) - 1
 
-    cap_paragraph = document.add_paragraph(caption)
-    cap_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    return len(document.paragraphs) - 1
+    return caption_idx
 
 
 def format_document(source_path: Path, template_path: Path, overrides: dict) -> Path:
@@ -207,9 +251,15 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
             document.add_heading(item["text"], level=1)
             _flush_group()
         elif item["type"] == "heading_2":
+            if item["text"].strip() in REFERENCE_HEADING_TITLES and references:
+                _flush_group()
+                continue
             document.add_heading(item["text"], level=2)
             _flush_group()
         elif item["type"] == "heading_3":
+            if item["text"].strip() in REFERENCE_HEADING_TITLES and references:
+                _flush_group()
+                continue
             document.add_heading(item["text"], level=3)
             _flush_group()
         elif item["type"].startswith("numbered_"):
@@ -229,12 +279,11 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
                 figure_items.append((caption_idx, item))
             _flush_group()
         elif item["type"] == "table":
-            caption_idx = _insert_table(document, item)
+            caption_idx = _insert_table(document, item, config.body)
             if "key" in item and caption_idx is not None:
                 table_items.append((caption_idx, item))
             _flush_group()
         else:
-            # Body text — store as plain text for now, resolve later
             text = item.get("text", "")
             segments = parse_placeholders(text)
             for seg_type, seg_text in segments:
@@ -242,11 +291,10 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
                     citation_order.append(seg_text)
             has_refs = any(seg[0] == "ref" for seg in segments)
             if has_refs:
-                p = document.add_paragraph()
-                p.add_run(text)  # store full text; will be replaced in _resolve_xrefs
+                document.add_paragraph()
                 xref_paragraphs.append((len(document.paragraphs) - 1, text))
             else:
-                document.add_paragraph(text)
+                _add_body_paragraph(document, text, config.body)
             _flush_group()
     _flush_group()
 
@@ -268,8 +316,8 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
     apply_heading_formatting(document, config.headings)
     apply_body_formatting(document, config.body)
     apply_figure_table_formatting(document, config.figures)
-    apply_formula_formatting(document, config.formulas)
-    apply_formula_numbering(document, config.formulas, config.page, formula_items, registry)
+    apply_formula_formatting(document, config.formulas, formula_indices)
+    apply_formula_numbering(document, config.formulas, config.page, formula_items, registry, formula_indices)
 
     for idx in numbered_indices | formula_indices:
         document.paragraphs[idx].paragraph_format.first_line_indent = Pt(0)
@@ -277,11 +325,7 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
     # Generate bibliography section
     bib_start_idx = len(document.paragraphs)
     if references:
-        reference_by_key = {ref["key"]: ref for ref in references}
-        ordered_references = [reference_by_key[key] for key in citation_order if key in reference_by_key]
-        ordered_reference_keys = {ref["key"] for ref in ordered_references}
-        ordered_references.extend(ref for ref in references if ref["key"] not in ordered_reference_keys)
-        generate_bibliography(document, registry, ordered_references, config.references)
+        generate_bibliography(document, registry, references, config.references)
         # Clear indent on bibliography paragraphs
         for idx in range(bib_start_idx, len(document.paragraphs)):
             document.paragraphs[idx].paragraph_format.first_line_indent = Pt(0)
@@ -298,8 +342,7 @@ def create_document(output_path: Path, template_path: Path, paragraphs: list[dic
         # Rebuild with text runs and REF fields
         for seg_type, seg_text in segments:
             if seg_type == "text":
-                run = paragraph.add_run(seg_text)
-                apply_font(run, config.body.font_cn, config.body.font_en, config.body.size, False, False)
+                _add_inline_runs(paragraph, seg_text, config.body)
             else:
                 entry = registry.lookup(seg_text)
                 if entry is not None and entry.label_text:

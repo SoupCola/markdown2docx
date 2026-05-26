@@ -64,9 +64,11 @@ def insert_formula_paragraph(document, latex_str: str, font_en: str):
     return p
 
 
-def apply_formula_formatting(document, formula_config) -> None:
-    """Apply formatting to all formula paragraphs."""
-    for paragraph in document.paragraphs:
+def apply_formula_formatting(document, formula_config, paragraph_indices: set[int] | None = None) -> None:
+    """Apply formatting to display formula paragraphs."""
+    for idx, paragraph in enumerate(document.paragraphs):
+        if paragraph_indices is not None and idx not in paragraph_indices:
+            continue
         if not is_formula_paragraph(paragraph):
             continue
         paragraph.paragraph_format.first_line_indent = Pt(0)
@@ -104,7 +106,7 @@ def _set_tab_stops(paragraph, center_pos: int, right_pos: int) -> None:
     pPr.append(tabs)
 
 
-def apply_formula_numbering(document, formula_config, page_config=None, formula_items=None, registry=None) -> None:
+def apply_formula_numbering(document, formula_config, page_config=None, formula_items=None, registry=None, paragraph_indices: set[int] | None = None) -> None:
     """Add chapter-based or continuous numbering to formula paragraphs.
 
     Uses center tab + right tab so formula is centered and number is right-aligned.
@@ -137,6 +139,8 @@ def apply_formula_numbering(document, formula_config, page_config=None, formula_
             chapter_num += 1
             formula_count_in_chapter = 0
 
+        if paragraph_indices is not None and para_idx not in paragraph_indices:
+            continue
         if not is_formula_paragraph(paragraph):
             continue
 

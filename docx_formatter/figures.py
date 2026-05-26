@@ -10,8 +10,8 @@ from docx.oxml.ns import qn
 from .references import wrap_in_bookmark
 from .styles import apply_font
 
-FIGURE_PATTERN = re.compile(r"^图\s+\d+(?:-\d+)?")
-TABLE_PATTERN = re.compile(r"^表\s+\d+(?:-\d+)?")
+FIGURE_PATTERN = re.compile(r"^图\s*\d+(?:[.-]\d+)?")
+TABLE_PATTERN = re.compile(r"^表\s*\d+(?:[.-]\d+)?")
 
 
 def _set_cell_border(cell, **kwargs):
@@ -81,7 +81,10 @@ def auto_number_captions(document, registry, kind: str, items: list[tuple[int, d
         paragraph = document.paragraphs[paragraph_index]
         caption_text = item.get("caption", "")
 
-        if config.numbering == "chapter":
+        explicit_num = item.get("figure_num") if kind == "figure" else item.get("table_num")
+        if explicit_num:
+            label_text = f"{prefix}{explicit_num}"
+        elif config.numbering == "chapter":
             # Count Heading 1 paragraphs before this index
             chapter_num = 0
             for i in range(paragraph_index):
@@ -91,9 +94,12 @@ def auto_number_captions(document, registry, kind: str, items: list[tuple[int, d
                     chapter_num += 1
             # Count items of same kind in same chapter that come before this one
             count_in_chapter = 0
-            for pi, _ in items[:item_idx]:
+            for pi, other_item in items[:item_idx]:
                 if pi >= paragraph_index:
                     break
+                other_explicit = other_item.get("figure_num") if kind == "figure" else other_item.get("table_num")
+                if other_explicit:
+                    continue
                 ch = 0
                 for i in range(pi):
                     p = document.paragraphs[i]

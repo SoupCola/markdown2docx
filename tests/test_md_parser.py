@@ -8,7 +8,7 @@ def test_parse_markdown_headings_and_body(tmp_path):
 
     md_path = tmp_path / "chapter1.md"
     md_path.write_text(
-        "# 第一章\n\n正文第一段。\n\n## 背景\n\n补充说明。\n\n### 小节\n\n结尾。\n",
+        "# 第一章\n\n正文第一段。\n\n## 背景\n\n补充说明。\n\n### 小节\n\n结尾。\n\n#### 2.2.1 音频特征提取\n\n三级标题内容。\n",
         encoding="utf-8",
     )
 
@@ -22,6 +22,8 @@ def test_parse_markdown_headings_and_body(tmp_path):
         {"type": "body", "text": "补充说明。"},
         {"type": "heading_3", "text": "小节"},
         {"type": "body", "text": "结尾。"},
+        {"type": "heading_3", "text": "2.2.1 音频特征提取"},
+        {"type": "body", "text": "三级标题内容。"},
     ]
 
 
@@ -161,6 +163,69 @@ def test_parse_markdown_tables(tmp_path):
         ["操作系统", "Windows 11", "运行环境"],
     ]
     assert paragraphs[0]["key"] == "tab:auto_1"
+
+
+def test_parse_markdown_binds_table_caption_to_following_table(tmp_path):
+    from docx_formatter.md_parser import parse_markdown_files
+
+    md_path = tmp_path / "tables.md"
+    md_path.write_text(
+        "表2.1  开发环境配置表\n\n"
+        "| 类别 | 名称 |\n"
+        "| --- | --- |\n"
+        "| 数据库 | MySQL |\n",
+        encoding="utf-8",
+    )
+
+    paragraphs, references = parse_markdown_files([md_path])
+
+    assert references == []
+    assert len(paragraphs) == 1
+    assert paragraphs[0]["type"] == "table"
+    assert paragraphs[0]["table_num"] == "2.1"
+    assert paragraphs[0]["caption"] == "开发环境配置表"
+    assert paragraphs[0]["rows"] == [["类别", "名称"], ["数据库", "MySQL"]]
+
+
+def test_parse_markdown_supports_spaced_table_caption_with_parentheses(tmp_path):
+    from docx_formatter.md_parser import parse_markdown_files
+
+    md_path = tmp_path / "question-table.md"
+    md_path.write_text(
+        "表 4.2 题库表（question）\n\n"
+        "| 字段 | 类型 |\n"
+        "| --- | --- |\n"
+        "| id | bigint |\n",
+        encoding="utf-8",
+    )
+
+    paragraphs, _ = parse_markdown_files([md_path])
+
+    assert len(paragraphs) == 1
+    assert paragraphs[0]["type"] == "table"
+    assert paragraphs[0]["table_num"] == "4.2"
+    assert paragraphs[0]["caption"] == "题库表（question）"
+
+
+def test_parse_markdown_filters_standalone_horizontal_rules(tmp_path):
+    from docx_formatter.md_parser import parse_markdown_files
+
+    md_path = tmp_path / "horizontal-rules.md"
+    md_path.write_text(
+        "# 第二章\n\n"
+        "---\n\n"
+        "正文内容。\n\n"
+        "***\n\n"
+        "___\n",
+        encoding="utf-8",
+    )
+
+    paragraphs, _ = parse_markdown_files([md_path])
+
+    assert paragraphs == [
+        {"type": "heading_1", "text": "第二章"},
+        {"type": "body", "text": "正文内容。"},
+    ]
 
 
 def test_parse_markdown_recognizes_natural_figure_and_table_references(tmp_path):

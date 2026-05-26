@@ -221,7 +221,7 @@ def test_create_from_markdown_builds_multiple_ref_fields_in_one_paragraph(tmp_pa
 
 
 
-def test_create_from_markdown_numbers_references_by_first_citation_order(tmp_path):
+def test_create_from_markdown_numbers_references_by_markdown_reference_order(tmp_path):
     md_path = tmp_path / "citation-order.md"
     md_path.write_text(
         "先引用[2]，再引用[1]。\n\n"
@@ -238,8 +238,8 @@ def test_create_from_markdown_numbers_references_by_first_citation_order(tmp_pat
 
     created = Document(output)
     assert created.paragraphs[1].text == "参考文献"
-    assert created.paragraphs[2].text == "[1] Wang L. Document Intelligence. Science, 2025."
-    assert created.paragraphs[3].text == "[2] Smith J. Deep Learning. Nature, 2024."
+    assert created.paragraphs[2].text == "[1] Smith J. Deep Learning. Nature, 2024."
+    assert created.paragraphs[3].text == "[2] Wang L. Document Intelligence. Science, 2025."
 
     document_xml = _document_xml(output)
     assert document_xml.count(" REF _ref_2 \\h ") == 1
@@ -266,6 +266,139 @@ def test_create_from_markdown_ignores_manual_bibliography_heading(tmp_path):
     assert [paragraph.text for paragraph in created.paragraphs].count("参考文献") == 1
     assert created.paragraphs[1].text == "参考文献"
     assert created.paragraphs[2].text == "[1] Smith J. Deep Learning. Nature, 2024."
+
+
+
+def test_create_from_markdown_ignores_manual_level2_bibliography_heading(tmp_path):
+    md_path = tmp_path / "manual-level2-bibliography-heading.md"
+    md_path.write_text(
+        "正文引用[1]。\n\n"
+        "## 参考文献\n\n"
+        "[1] Smith J. Deep Learning. Nature, 2024.\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "manual-level2-bibliography-heading.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    assert [paragraph.text for paragraph in created.paragraphs].count("参考文献") == 1
+    assert created.paragraphs[1].text == "参考文献"
+    assert created.paragraphs[2].text == "[1] Smith J. Deep Learning. Nature, 2024."
+
+
+def test_create_from_markdown_places_explicit_table_caption_above_table_without_duplicate(tmp_path):
+    md_path = tmp_path / "explicit-table-caption.md"
+    md_path.write_text(
+        "# 第四章\n\n"
+        "表4.2 题库表（question）\n\n"
+        "| 字段 | 类型 | 说明 |\n"
+        "| --- | --- | --- |\n"
+        "| id | bigint | 主键 |\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "explicit-table-caption.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    paragraph_texts = [p.text for p in created.paragraphs]
+
+    assert paragraph_texts == ["第四章", "表4.2 题库表（question）"]
+    assert len(created.tables) == 1
+    assert created.paragraphs[1].alignment == WD_ALIGN_PARAGRAPH.CENTER
+    assert "表 0-" not in "\n".join(paragraph_texts)
+    assert "表 4-" not in "\n".join(paragraph_texts)
+
+    document_xml = _document_xml(output)
+    assert 'w:name="_tab_auto_1"' in document_xml
+
+
+def test_create_from_markdown_renders_inline_bold_and_formula(tmp_path):
+    md_path = tmp_path / "inline-formatting.md"
+    md_path.write_text(
+        "**正则化**：其中 $p_t$ 为模型预测概率，$\\gamma=2.0$ 为聚焦参数。\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "inline-formatting.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    paragraph = created.paragraphs[0]
+    assert paragraph.text == "正则化：其中  为模型预测概率， 为聚焦参数。"
+    bold_runs = [run for run in paragraph.runs if run.text == "正则化"]
+    assert len(bold_runs) == 1
+    assert bold_runs[0].bold is True
+
+    document_xml = _document_xml(output)
+    assert "**正则化**" not in document_xml
+    assert "$p_t$" not in document_xml
+    assert "m:oMath" in document_xml
+
+
+def test_create_from_markdown_leaves_malformed_inline_formula_text_unconverted(tmp_path):
+    md_path = tmp_path / "malformed-inline-formula.md"
+    md_path.write_text(
+        "错误公式 $a。中文$b$ 后续\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "malformed-inline-formula.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    paragraph = created.paragraphs[0]
+    assert "$a。中文" in paragraph.text
+    assert "b$" in paragraph.text
+    assert "后续" in paragraph.text
+
+    document_xml = _document_xml(output)
+    assert "错误公式" in document_xml
+    assert "中文" in document_xml
+    assert "m:oMath" not in document_xml
+
+
+def test_create_from_markdown_renders_gated_inline_formula(tmp_path):
+    md_path = tmp_path / "gated-inline-formula.md"
+    md_path.write_text(
+        "融合特征通过逐元素乘法施加门控权重："
+        "$\\mathbf{f}_{gated} = \\mathbf{f}_{concat} \\odot \\mathbf{g}$。"
+        "门控向量 $\\mathbf{g}$ 的每个元素 $g_i \\in (0, 1)$ 控制对应特征维度的通过程度。\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "gated-inline-formula.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    paragraph = created.paragraphs[0]
+    assert "$\\mathbf{f}_{gated}" not in paragraph.text
+    assert "$\\mathbf{g}$" not in paragraph.text
+    assert "$g_i \\in (0, 1)$" not in paragraph.text
+    assert "门控向量" in paragraph.text
+    assert "控制对应特征维度的通过程度。" in paragraph.text
+
+    document_xml = _document_xml(output)
+    assert "$\\mathbf{f}_{gated}" not in document_xml
+    assert "$\\mathbf{g}$" not in document_xml
+    assert "$g_i \\in (0, 1)$" not in document_xml
+    assert document_xml.count("<m:oMath>") == 3
 
 
 def test_create_from_markdown_uses_local_skill_runtime_for_tables(tmp_path):
@@ -327,3 +460,29 @@ def test_create_from_markdown_renders_markdown_tables_into_docx_tables(tmp_path)
     assert created.tables[0].cell(2, 0).text == "操作系统"
     assert created.tables[0].cell(2, 1).text == "Windows 11"
     assert created.tables[0].cell(2, 2).text == "运行环境"
+
+
+def test_create_from_markdown_renders_inline_bold_inside_table_cells(tmp_path):
+    md_path = tmp_path / "table-inline-bold.md"
+    md_path.write_text(
+        "| 指标 | 数值 |\n"
+        "| --- | --- |\n"
+        "| **宏平均** | **0.855** |\n",
+        encoding="utf-8",
+    )
+
+    output = create_from_markdown(
+        output_path=tmp_path / "table-inline-bold.docx",
+        md_paths=[md_path],
+        template_path=THESIS_TEMPLATE,
+    )
+
+    created = Document(output)
+    assert created.tables[0].cell(1, 0).text == "宏平均"
+    assert created.tables[0].cell(1, 1).text == "0.855"
+    assert created.tables[0].cell(1, 0).paragraphs[0].runs[0].bold is True
+    assert created.tables[0].cell(1, 1).paragraphs[0].runs[0].bold is True
+
+    document_xml = _document_xml(output)
+    assert "**宏平均**" not in document_xml
+    assert "**0.855**" not in document_xml

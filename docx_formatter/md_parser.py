@@ -15,6 +15,8 @@ _ORDERED_LIST_PATTERN = re.compile(r"^\d+\.\s+(?P<text>.+)$")
 _UNORDERED_LIST_PATTERN = re.compile(r"^[*-]\s+(?P<text>.+)$")
 _TABLE_ROW_PATTERN = re.compile(r"^\|.*\|$")
 _TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$")
+_TABLE_CAPTION_LINE_PATTERN = re.compile(r"^表\s*(?P<num>\d+(?:[.-]\d+)*)\s+(?P<caption>.+)$")
+_HORIZONTAL_RULE_PATTERN = re.compile(r"^(?:-{3,}|\*{3,}|_{3,})$")
 _INLINE_FOOTNOTE_REF_PATTERN = re.compile(r"\[\^(?P<key>[^\]]+)\]")
 _INLINE_NUMBERED_REF_PATTERN = re.compile(r"(?<!\!)\[(?P<key>\d+)\]")
 
@@ -142,7 +144,26 @@ def _parse_reference_definition(line: str) -> dict | None:
     return None
 
 
-def _parse_table(lines: list[str], start: int, table_counter: int) -> tuple[dict, int, int] | None:
+def _parse_table_caption_line(line: str) -> dict | None:
+    match = _TABLE_CAPTION_LINE_PATTERN.match(line.strip())
+    if not match:
+        return None
+    return {
+        "table_num": match.group("num"),
+        "caption": _normalize_text(match.group("caption")),
+    }
+
+
+def _is_horizontal_rule(line: str) -> bool:
+    return bool(_HORIZONTAL_RULE_PATTERN.match(line.strip()))
+
+
+def _parse_table(
+    lines: list[str],
+    start: int,
+    table_counter: int,
+    caption_info: dict | None = None,
+) -> tuple[dict, int, int] | None:
     if start + 1 >= len(lines):
         return None
     if not _TABLE_ROW_PATTERN.match(lines[start].strip()):
@@ -162,12 +183,15 @@ def _parse_table(lines: list[str], start: int, table_counter: int) -> tuple[dict
     header = rows[0]
     body_rows = rows[2:] if len(rows) >= 2 else []
     table_counter += 1
-    return {
+    item = {
         "type": "table",
         "rows": [header, *body_rows],
         "caption": "",
         "key": f"tab:auto_{table_counter}",
-    }, idx, table_counter
+    }
+    if caption_info:
+        item.update(caption_info)
+    return item, idx, table_counter
 
 
 _EXPLICIT_FIGURE_NUM_PATTERN = re.compile(r"^图\s*(\d+(?:-\d+)?)\s*")
@@ -314,11 +338,27 @@ def parse_markdown_files(md_paths: list[Path]) -> tuple[list[dict], list[dict]]:
                 idx = new_idx
                 continue
 
+            if _is_horizontal_rule(line):
+                idx += 1
+                continue
+
             ref_def = _parse_reference_definition(raw_line)
             if ref_def is not None:
                 references.append(ref_def)
                 idx += 1
                 continue
+
+            caption_info = _parse_table_caption_line(line)
+            if caption_info is not None:
+                lookahead = idx + 1
+                while lookahead < len(lines) and not lines[lookahead].strip():
+                    lookahead += 1
+                table_result = _parse_table(lines, lookahead, table_counter, caption_info)
+                if table_result is not None:
+                    table_item, next_idx, table_counter = table_result
+                    paragraphs.append(table_item)
+                    idx = next_idx
+                    continue
 
             table_result = _parse_table(lines, idx, table_counter)
             if table_result is not None:
@@ -351,6 +391,10 @@ def parse_markdown_files(md_paths: list[Path]) -> tuple[list[dict], list[dict]]:
                     idx = next_idx
                     continue
 
+            if line.startswith("#### "):
+                paragraphs.append({"type": "heading_3", "text": _normalize_text(line[5:])})
+                idx += 1
+                continue
             if line.startswith("### "):
                 paragraphs.append({"type": "heading_3", "text": _normalize_text(line[4:])})
                 idx += 1
@@ -388,6 +432,7 @@ def parse_markdown_files(md_paths: list[Path]) -> tuple[list[dict], list[dict]]:
                     next_line.startswith("# ")
                     or next_line.startswith("## ")
                     or next_line.startswith("### ")
+                    or next_line.startswith("#### ")
                     or _is_reference_definition(next_line)
                     or _ORDERED_LIST_PATTERN.match(next_line)
                     or _UNORDERED_LIST_PATTERN.match(next_line)
@@ -395,6 +440,8 @@ def parse_markdown_files(md_paths: list[Path]) -> tuple[list[dict], list[dict]]:
                     or (next_line.startswith("$$") and next_line.endswith("$$"))
                     or next_line == "$$"
                     or _TABLE_ROW_PATTERN.match(next_line)
+                    or _is_horizontal_rule(next_line)
+                    or _parse_table_caption_line(next_line) is not None
                 ):
                     break
                 body_lines.append(next_line)

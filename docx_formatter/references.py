@@ -112,7 +112,7 @@ def make_ref_field(bookmark_name: str, display_text: str, superscript: bool = Fa
     return [begin_r, instr_r, sep_r, display_r, end_r]
 
 
-_PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z]+:[^}]+)\}")
 
 
 def parse_placeholders(text: str) -> list[tuple[str, str]]:
