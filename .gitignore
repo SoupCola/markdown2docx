@@ -21,4 +21,24 @@ build/
 Thumbs.db
 
 # Claude local
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/figure-builder/
+!.claude/skills/figure-builder/**
+!.claude/skills/ppt-builder/
+.claude/skills/ppt-builder/*
+!.claude/skills/ppt-builder/SKILL.md
+!.claude/skills/ppt-builder/references/
+.claude/skills/ppt-builder/references/*
+!.claude/skills/ppt-builder/references/workflow.md
+!.claude/skills/ppt-builder/references/ppt-master.md
+!.claude/skills/markdown2docx/
+.claude/skills/markdown2docx/*
+!.claude/skills/markdown2docx/SKILL.md
+!.claude/skills/bishe-guider/
+.claude/skills/bishe-guider/*
+!.claude/skills/bishe-guider/SKILL.md
+!.claude/skills/thesis-workflow/
+.claude/skills/thesis-workflow/*
+!.claude/skills/thesis-workflow/SKILL.md
